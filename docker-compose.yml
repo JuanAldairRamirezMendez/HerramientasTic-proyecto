@@ -87,6 +87,14 @@ services:
       - backend-api
     restart: unless-stopped
 
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: herramientastic-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://frontend:80
+    depends_on:
+      - frontend
+
 volumes:
   redis_data:
   ollama_data:
