@@ -1,5 +1,21 @@
 services:
-  # 1. Redis para las colas de BullMQ
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    devices:
+      - "/dev/kfd:/dev/kfd"
+      - "/dev/dri:/dev/dri"
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+      - OLLAMA_KEEP_ALIVE=24h
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
   redis:
     image: redis:7-alpine
     ports:
@@ -13,7 +29,6 @@ services:
       timeout: 5s
       retries: 5
 
-    # 2. Backend API (Express)
   backend-api:
     build:
       context: ./Gestor-Inteligente-de-Documentos
@@ -21,34 +36,35 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - .env  # <--- Fuerza la lectura del archivo .env
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=3000
       - REDIS_URL=redis://redis:6379
-      - OLLAMA_HOST=${OLLAMA_HOST}          # <--- Ahora lee del .env
-      - OLLAMA_MODEL=${OLLAMA_MODEL}        # <--- Ahora lee del .env
-      - QUEUE_ENABLED=${QUEUE_ENABLED}      # <--- Ahora lee del .env
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - QUEUE_ENABLED=${QUEUE_ENABLED}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
       - FRONTEND_URL=${FRONTEND_URL}
     depends_on:
       redis:
         condition: service_healthy
+      ollama:
+        condition: service_started
     restart: unless-stopped
     command: node dist/index.js
 
-  # 3. Backend Worker (Procesamiento en segundo plano)
   backend-worker:
     build:
       context: ./Gestor-Inteligente-de-Documentos
       dockerfile: Dockerfile
     env_file:
-      - .env  # <--- Fuerza la lectura del archivo .env
+      - .env
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
-      - OLLAMA_HOST=${OLLAMA_HOST}
+      - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL}
       - QUEUE_ENABLED=${QUEUE_ENABLED}
       - SUPABASE_URL=${SUPABASE_URL}
@@ -56,10 +72,11 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      ollama:
+        condition: service_started
     restart: unless-stopped
     command: node dist/workers/document.worker.js
 
-  # 4. Frontend (Vite + Nginx)
   frontend:
     build:
       context: ./Gestor-Inteligente-de-Documentos-Frontend
@@ -72,3 +89,4 @@ services:
 
 volumes:
   redis_data:
+  ollama_data:
