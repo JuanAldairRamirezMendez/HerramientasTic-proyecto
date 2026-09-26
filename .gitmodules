@@ -1,0 +1,6 @@
+[submodule "Gestor-Inteligente-de-Documentos"]
+	path = Gestor-Inteligente-de-Documentos
+	url = https://github.com/tu-user/backend-repo.git
+[submodule "Gestor-Inteligente-de-Documentos-Frontend"]
+	path = Gestor-Inteligente-de-Documentos-Frontend
+	url = https://github.com/tu-user/frontend-repo.git

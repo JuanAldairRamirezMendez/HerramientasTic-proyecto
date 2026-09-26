@@ -1,0 +1,74 @@
+services:
+  # 1. Redis para las colas de BullMQ
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    # 2. Backend API (Express)
+  backend-api:
+    build:
+      context: ./Gestor-Inteligente-de-Documentos
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env  # <--- Fuerza la lectura del archivo .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - REDIS_URL=redis://redis:6379
+      - OLLAMA_HOST=${OLLAMA_HOST}          # <--- Ahora lee del .env
+      - OLLAMA_MODEL=${OLLAMA_MODEL}        # <--- Ahora lee del .env
+      - QUEUE_ENABLED=${QUEUE_ENABLED}      # <--- Ahora lee del .env
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
+      - FRONTEND_URL=${FRONTEND_URL}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: node dist/index.js
+
+  # 3. Backend Worker (Procesamiento en segundo plano)
+  backend-worker:
+    build:
+      context: ./Gestor-Inteligente-de-Documentos
+      dockerfile: Dockerfile
+    env_file:
+      - .env  # <--- Fuerza la lectura del archivo .env
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - OLLAMA_HOST=${OLLAMA_HOST}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - QUEUE_ENABLED=${QUEUE_ENABLED}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: node dist/workers/document.worker.js
+
+  # 4. Frontend (Vite + Nginx)
+  frontend:
+    build:
+      context: ./Gestor-Inteligente-de-Documentos-Frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend-api
+    restart: unless-stopped
+
+volumes:
+  redis_data:
