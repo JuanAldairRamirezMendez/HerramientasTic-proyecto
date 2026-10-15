@@ -29,23 +29,6 @@ services:
       timeout: 5s
       retries: 5
 
-  minio:
-    image: minio/minio:latest
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   backend-api:
     build:
@@ -65,17 +48,11 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
       - FRONTEND_URL=${FRONTEND_URL}
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
-      - S3_BUCKET=${S3_BUCKET:-documentos}
     depends_on:
       redis:
         condition: service_healthy
       ollama:
         condition: service_started
-      minio:
-        condition: service_healthy
     restart: unless-stopped
     command: node dist/index.js
 
@@ -93,17 +70,11 @@ services:
       - QUEUE_ENABLED=${QUEUE_ENABLED}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
-      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin}
-      - S3_BUCKET=${S3_BUCKET:-documentos}
     depends_on:
       redis:
         condition: service_healthy
       ollama:
         condition: service_started
-      minio:
-        condition: service_healthy
     restart: unless-stopped
     command: node dist/workers/document.worker.js
 
@@ -128,4 +99,3 @@ services:
 volumes:
   redis_data:
   ollama_data:
-  minio_data:
