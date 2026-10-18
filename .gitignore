@@ -1,3 +1,8 @@
 .env
 Gestor-Inteligente-de-Documentos-Frontend.zip
 graphify-out/
+
+# Configuración local de agentes de IA (no versionar)
+.agents/
+.claude/
+.opencode/
