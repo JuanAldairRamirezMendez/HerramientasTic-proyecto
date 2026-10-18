@@ -5,9 +5,6 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    devices:
-      - "/dev/kfd:/dev/kfd"
-      - "/dev/dri:/dev/dri"
     environment:
       - HSA_OVERRIDE_GFX_VERSION=10.3.0
       - OLLAMA_KEEP_ALIVE=24h
@@ -42,8 +39,15 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - REDIS_URL=redis://redis:6379
+      - IA_PROVIDER=${IA_PROVIDER:-auto}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      - GEMINI_TIMEOUT_MS=${GEMINI_TIMEOUT_MS:-45000}
+      - GEMINI_THINKING_LEVEL=${GEMINI_THINKING_LEVEL:-minimal}
+      - OLLAMA_FALLBACK=${OLLAMA_FALLBACK:-true}
       - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_TIMEOUT_MS=${OLLAMA_TIMEOUT_MS}
       - QUEUE_ENABLED=${QUEUE_ENABLED}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
@@ -65,8 +69,15 @@ services:
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
+      - IA_PROVIDER=${IA_PROVIDER:-auto}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      - GEMINI_TIMEOUT_MS=${GEMINI_TIMEOUT_MS:-45000}
+      - GEMINI_THINKING_LEVEL=${GEMINI_THINKING_LEVEL:-minimal}
+      - OLLAMA_FALLBACK=${OLLAMA_FALLBACK:-true}
       - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL}
+      - OLLAMA_TIMEOUT_MS=${OLLAMA_TIMEOUT_MS}
       - QUEUE_ENABLED=${QUEUE_ENABLED}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
