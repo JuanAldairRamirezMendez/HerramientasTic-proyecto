@@ -30,7 +30,9 @@ En la raíz del proyecto tienes a disposición el script `tunnel.sh`:
 ```bash
 ./tunnel.sh url
 ```
-*Imprime la URL pública HTTPS activa y la copia automáticamente al portapapeles.*
+*Imprime la URL pública HTTPS activa, la copia al portapapeles y la **guarda** en `$HOME/cloudflare-url.txt` para que puedas copiarla de ahí cuando quieras.*
+
+> Los subdominios `trycloudflare.com` son **temporales**: cada vez que el contenedor del túnel se reinicia, Cloudflare asigna uno nuevo. Por eso la URL no se debe memorizar ni compartir de forma permanente, y conviene leerla siempre del archivo `cloudflare-url.txt`.
 
 ### Reiniciar el túnel
 ```bash
@@ -70,6 +72,57 @@ El servicio `tunnel` ya se encuentra integrado en [`docker-compose.yml`](docker-
 ```
 
 Gracias a `restart: unless-stopped`, mientras dejes tu PC encendida, el túnel permanecerá activo y se reiniciará automáticamente si hay microcortes de conexión.
+
+### El archivo `cloudflare-url.txt`
+
+Como el reinicio automático cambia la URL, el proyecto incluye
+[`scripts/cloudflare-url-sync.sh`](scripts/cloudflare-url-sync.sh): lee la URL más
+reciente de los logs del contenedor y la deja en `cloudflare-url.txt` (solo
+escribe cuando cambia de verdad).
+
+En este servidor se ejecuta solo, cada minuto, mediante un **timer de systemd**
+(unidades `cloudflare-url-sync.service` y `cloudflare-url-sync.timer`), de modo
+que el archivo nunca se queda con un enlace muerto aunque el túnel se reinicie
+sin que nadie ejecute `tunnel.sh`. Para instalarlo en otra máquina Linux:
+
+```bash
+sudo tee /etc/systemd/system/cloudflare-url-sync.service >/dev/null <<'UNIT'
+[Unit]
+Description=Sincroniza la URL publica del tunel de Cloudflare en cloudflare-url.txt
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+Environment=CLOUDFLARE_URL_FILE=%h/cloudflare-url.txt
+Environment=CLOUDFLARE_URL_OWNER=%u
+ExecStart=/ruta/al/proyecto/scripts/cloudflare-url-sync.sh
+UNIT
+
+sudo tee /etc/systemd/system/cloudflare-url-sync.timer >/dev/null <<'UNIT'
+[Unit]
+Description=Revisa cada minuto la URL publica del tunel de Cloudflare
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=cloudflare-url-sync.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now cloudflare-url-sync.timer
+```
+
+Comprobación manual en cualquier momento:
+
+```bash
+./scripts/cloudflare-url-sync.sh   # deja la URL en $HOME/cloudflare-url.txt
+./tunnel.sh url                    # la muestra y también la guarda
+```
 
 ---
 

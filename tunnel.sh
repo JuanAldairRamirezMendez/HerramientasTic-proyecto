@@ -11,6 +11,18 @@ cd "$DIR"
 CONTAINER_NAME="herramientastic-tunnel"
 SERVICE_NAME="tunnel"
 
+# Archivo donde se deja la URL pública para copiarla cómodamente. Si se ejecuta
+# con sudo, se usa el home del usuario real (nunca /root).
+URL_FILE="${CLOUDFLARE_URL_FILE:-}"
+if [ -z "$URL_FILE" ]; then
+    HOME_DIR="${HOME:-}"
+    if [ -n "${SUDO_USER:-}" ]; then
+        HOME_DIR="$(getent passwd "$SUDO_USER" 2>/dev/null | cut -d: -f6 || true)"
+    fi
+    [ -n "$HOME_DIR" ] || HOME_DIR="$HOME"
+    URL_FILE="${HOME_DIR%/}/cloudflare-url.txt"
+fi
+
 # Colores para la terminal
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -45,6 +57,28 @@ get_tunnel_url() {
     return 1
 }
 
+# Deja la URL activa en $URL_FILE para que siempre se pueda copiar de ahí,
+# incluso cuando el túnel se reinicia solo y cambia de dirección.
+save_url() {
+    local url="$1"
+
+    [ -n "$url" ] || return 0
+    if [ "$(cat "$URL_FILE" 2>/dev/null || true)" = "$url" ]; then
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$URL_FILE")" 2>/dev/null || true
+    if printf '%s\n' "$url" > "$URL_FILE" 2>/dev/null; then
+        chmod 600 "$URL_FILE" 2>/dev/null || true
+        if [ -n "${SUDO_USER:-}" ]; then
+            chown "$SUDO_USER:$(id -gn "$SUDO_USER" 2>/dev/null || echo "$SUDO_USER")" "$URL_FILE" 2>/dev/null || true
+        fi
+        echo -e "${YELLOW}💾 URL guardada en $URL_FILE${NC}"
+    else
+        echo -e "${YELLOW}⚠️  No se pudo escribir $URL_FILE${NC}"
+    fi
+}
+
 show_url() {
     if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         echo -e "${YELLOW}⚠️  El contenedor de Cloudflare Tunnel no está corriendo.${NC}"
@@ -57,6 +91,7 @@ show_url() {
     URL=$(get_tunnel_url || true)
 
     if [ -n "$URL" ]; then
+        save_url "$URL"
         echo ""
         echo -e "${GREEN}${BOLD}============================================================${NC}"
         echo -e "${GREEN}${BOLD}  🌐 URL PÚBLICA DEL FRONTEND (ACCESO DESDE CUALQUIER LUGAR):${NC}"
@@ -64,6 +99,7 @@ show_url() {
         echo -e "${GREEN}${BOLD}============================================================${NC}"
         echo ""
         echo -e "Puedes abrir este enlace en tu celular, tablet o cualquier PC externa."
+        echo -e "También queda guardado en: ${CYAN}$URL_FILE${NC}"
         echo -e "Nota: Tu PC debe permanecer encendida para mantener el servicio activo."
         echo ""
 
@@ -136,6 +172,9 @@ help_menu() {
     echo ""
     echo "Ejemplo:"
     echo "  ./tunnel.sh url"
+    echo ""
+    echo "La URL activa queda guardada en: $URL_FILE"
+    echo "(se puede cambiar con la variable de entorno CLOUDFLARE_URL_FILE)"
 }
 
 case "${1:-url}" in
