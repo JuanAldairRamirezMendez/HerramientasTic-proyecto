@@ -133,18 +133,34 @@ levantado y con la URL nueva disponible. De eso se encarga el servicio
 1. Levanta el stack con `docker compose -f docker-compose.yml up -d`.
 2. Espera a que Cloudflare anuncie la URL (hasta 2 minutos) y la deja en
    `cloudflare-url.txt`.
-3. Intenta avisar por WhatsApp (opcional, depende de las credenciales de
-   `/etc/gestor-documentos/whatsapp.env`).
-4. Registra la URL en el log: `journalctl -t gestor-documentos`.
+3. Registra la URL en el log: `journalctl -t gestor-documentos`.
+
+El arranque **no notifica a nadie por sí mismo**: solo escribe la URL en el
+archivo y en el log. El aviso al móvil lo manda el correo (ver "Aviso por correo
+cuando cambia la URL"), que corre en su propio timer; de ese modo un fallo de
+SMTP no puede tumbar el arranque.
 
 > **Ojo con el archivo compose**: el script apuntaba a `docker-compose.azure.yml`,
 > que no existe, y con `set -e` moría en la primera línea: el stack no lo
 > levantaba él y la URL no se guardaba en el arranque. Si algún día se renombra
 > `docker-compose.yml`, hay que actualizar esa ruta.
->
-> Un aviso que falle (por ejemplo, un token de WhatsApp vencido) **no** debe
-> tumbar el arranque: los `curl` de notificación llevan `|| logger` para dejar
-> constancia en el log y seguir.
+
+### Se retiró el aviso por WhatsApp (19 oct 2026)
+
+El arranque intentaba mandar la URL por WhatsApp con la API de Meta y fallaba con
+**401 (token vencido)**. Su único uso era esta URL y el correo ya la manda, así
+que se quitó el canal. Las piezas quedaron **desactivadas, no borradas**:
+
+| Pieza | Estado |
+|---|---|
+| `/opt/gestor-documentos/start.sh` | bloque de WhatsApp eliminado (copia: `start.sh.bak-whatsapp-20261019`) |
+| `/opt/gestor-documentos/send-whatsapp-url.sh` | renombrado a `.disabled` (no lo llamaba nadie) |
+| `/etc/gestor-documentos/whatsapp.env` | renombrado a `.disabled` |
+| `/etc/systemd/system/gestor-documentos.service` | sin la línea `EnvironmentFile=` |
+| Copias con las credenciales | `/root/whatsapp.env.bak-20261019`, `/root/send-whatsapp-url.sh.bak-20261019`, `/root/gestor-documentos.service.bak-whatsapp-20261019` |
+
+Para reactivarlo habría que reponer el bloque y el `EnvironmentFile`, y renovar
+el token en Meta.
 
 Como red de seguridad, los timers de systemd repasan la URL cada minuto, así que
 aunque el servicio de arranque falle o el túnel tarde en aparecer, el archivo se
@@ -153,7 +169,8 @@ corrige solo.
 ### Aviso por correo cuando cambia la URL
 
 `scripts/cloudflare-url-mail.sh` manda un correo con el enlace nuevo (y el
-anterior) cuando detecta un cambio, avisando de que el viejo ya no responde:
+anterior) cuando detecta un cambio, avisando de que el viejo ya no responde. Es
+el canal de aviso al móvil desde que se retiró WhatsApp:
 
 - Espera **90 s** a que la URL se asiente, para no avisar de direcciones
   transitorias si el servidor reinicia en cadena.
