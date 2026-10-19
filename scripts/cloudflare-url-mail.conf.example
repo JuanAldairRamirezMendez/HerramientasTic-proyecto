@@ -1,0 +1,29 @@
+# ==============================================================================
+# Plantilla de configuración del aviso por correo cuando cambia la URL pública
+# del túnel (lo usa scripts/cloudflare-url-mail.sh).
+#
+# Copiar a  $HOME/.config/cloudflare-url-mail.conf  y completar los datos.
+# ESTE ARCHIVO CON DATOS REALES NO DEBE SUBIRSE AL REPOSITORIO:
+# la contraseña quedaría expuesta en el historial de Git.
+#
+# Permisos recomendados: chmod 600 ~/.config/cloudflare-url-mail.conf
+#
+# Para Gmail hace falta una CONTRASEÑA DE APLICACIÓN (no la del correo), que
+# requiere tener activada la verificación en dos pasos:
+#   https://myaccount.google.com/apppasswords
+# ==============================================================================
+
+SMTP_HOST='smtp.gmail.com'
+SMTP_PORT='465'
+
+# Cuenta desde la que sale el aviso.
+SMTP_USER='tu-correo@gmail.com'
+# Contraseña de aplicación de 16 letras (sin espacios).
+SMTP_PASS='tu-app-password'
+
+# A dónde llega el aviso.
+MAIL_TO='tu-correo@gmail.com'
+
+# Remitente visible. Si se deja vacío se usa SMTP_USER.
+MAIL_FROM_ADDR=''
+MAIL_FROM_NAME='Gestor de Documentos - Aviso automático'

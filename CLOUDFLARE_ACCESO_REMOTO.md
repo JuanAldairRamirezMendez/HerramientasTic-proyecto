@@ -124,6 +124,64 @@ Comprobación manual en cualquier momento:
 ./tunnel.sh url                    # la muestra y también la guarda
 ```
 
+### Arranque automático de la VM (servicio systemd)
+
+La VM de Azure se apaga sola por desuso, así que al encenderla debe quedar todo
+levantado y con la URL nueva disponible. De eso se encarga el servicio
+`gestor-documentos.service`, que ejecuta `/opt/gestor-documentos/start.sh`:
+
+1. Levanta el stack con `docker compose -f docker-compose.yml up -d`.
+2. Espera a que Cloudflare anuncie la URL (hasta 2 minutos) y la deja en
+   `cloudflare-url.txt`.
+3. Intenta avisar por WhatsApp (opcional, depende de las credenciales de
+   `/etc/gestor-documentos/whatsapp.env`).
+4. Registra la URL en el log: `journalctl -t gestor-documentos`.
+
+> **Ojo con el archivo compose**: el script apuntaba a `docker-compose.azure.yml`,
+> que no existe, y con `set -e` moría en la primera línea: el stack no lo
+> levantaba él y la URL no se guardaba en el arranque. Si algún día se renombra
+> `docker-compose.yml`, hay que actualizar esa ruta.
+>
+> Un aviso que falle (por ejemplo, un token de WhatsApp vencido) **no** debe
+> tumbar el arranque: los `curl` de notificación llevan `|| logger` para dejar
+> constancia en el log y seguir.
+
+Como red de seguridad, los timers de systemd repasan la URL cada minuto, así que
+aunque el servicio de arranque falle o el túnel tarde en aparecer, el archivo se
+corrige solo.
+
+### Aviso por correo cuando cambia la URL
+
+`scripts/cloudflare-url-mail.sh` manda un correo con el enlace nuevo (y el
+anterior) cuando detecta un cambio, avisando de que el viejo ya no responde:
+
+- Espera **90 s** a que la URL se asiente, para no avisar de direcciones
+  transitorias si el servidor reinicia en cadena.
+- No manda más de **un correo cada 10 minutos**; los cambios seguidos se agrupan.
+- Hasta **3 intentos** por URL y después se rinde (sin bucles si el SMTP falla).
+- Solo avisa cuando la URL cambia de verdad.
+
+Configuración (nunca en el repositorio):
+
+```bash
+cp scripts/cloudflare-url-mail.conf.example ~/.config/cloudflare-url-mail.conf
+chmod 600 ~/.config/cloudflare-url-mail.conf
+nano ~/.config/cloudflare-url-mail.conf     # SMTP_USER, SMTP_PASS, MAIL_TO
+./scripts/cloudflare-url-mail.sh --test     # envía un correo de prueba
+```
+
+Para Gmail hace falta una **contraseña de aplicación** (no la del correo), que se
+genera en <https://myaccount.google.com/apppasswords> con la verificación en dos
+pasos activada.
+
+Activación del aviso automático (los dos timers, cada minuto):
+
+```bash
+sudo systemctl enable --now cloudflare-url-sync.timer cloudflare-url-mail.timer
+systemctl list-timers 'cloudflare-url-*'    # comprobar que están activos
+journalctl -u cloudflare-url-mail.service   # ver los envíos y los errores
+```
+
 ---
 
 ## 4. Opcional: Configurar un dominio propio permanente (Túnel con Token)
