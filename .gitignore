@@ -6,3 +6,6 @@ graphify-out/
 .agents/
 .claude/
 .opencode/
+
+# Estado local de las skills de agentes (se regenera solo)
+skills-lock.json
