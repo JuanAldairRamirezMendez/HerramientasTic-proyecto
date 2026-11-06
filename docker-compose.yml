@@ -1,18 +1,4 @@
 services:
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - HSA_OVERRIDE_GFX_VERSION=10.3.0
-      - OLLAMA_KEEP_ALIVE=24h
-    restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
-
   redis:
     image: redis:7-alpine
     ports:
@@ -26,7 +12,6 @@ services:
       timeout: 5s
       retries: 5
 
-
   backend-api:
     build:
       context: ./Gestor-Inteligente-de-Documentos
@@ -39,15 +24,11 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - REDIS_URL=redis://redis:6379
-      - IA_PROVIDER=${IA_PROVIDER:-auto}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
       - GEMINI_TIMEOUT_MS=${GEMINI_TIMEOUT_MS:-45000}
       - GEMINI_THINKING_LEVEL=${GEMINI_THINKING_LEVEL:-minimal}
-      - OLLAMA_FALLBACK=${OLLAMA_FALLBACK:-true}
-      - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
-      - OLLAMA_TIMEOUT_MS=${OLLAMA_TIMEOUT_MS}
+      - IA_MOBILE_MAX_TOKENS=${IA_MOBILE_MAX_TOKENS:-768}
       - QUEUE_ENABLED=${QUEUE_ENABLED}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
@@ -55,8 +36,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      ollama:
-        condition: service_started
     restart: unless-stopped
     command: node dist/index.js
 
@@ -69,23 +48,17 @@ services:
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
-      - IA_PROVIDER=${IA_PROVIDER:-auto}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
       - GEMINI_TIMEOUT_MS=${GEMINI_TIMEOUT_MS:-45000}
       - GEMINI_THINKING_LEVEL=${GEMINI_THINKING_LEVEL:-minimal}
-      - OLLAMA_FALLBACK=${OLLAMA_FALLBACK:-true}
-      - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL}
-      - OLLAMA_TIMEOUT_MS=${OLLAMA_TIMEOUT_MS}
+      - IA_MOBILE_MAX_TOKENS=${IA_MOBILE_MAX_TOKENS:-768}
       - QUEUE_ENABLED=${QUEUE_ENABLED}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
     depends_on:
       redis:
         condition: service_healthy
-      ollama:
-        condition: service_started
     restart: unless-stopped
     command: node dist/workers/document.worker.js
 
@@ -109,4 +82,3 @@ services:
 
 volumes:
   redis_data:
-  ollama_data:
