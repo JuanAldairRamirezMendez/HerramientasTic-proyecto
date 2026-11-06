@@ -13,7 +13,7 @@ Usuario sube documento
     -> Backend recibe archivo
     -> Extraccion de texto
     -> OCR si corresponde
-    -> Clasificacion con Ollama
+    -> Clasificacion con Gemini
     -> Extraccion de campos
     -> Resumen e informe ejecutivo
     -> Derivacion al area correspondiente
@@ -26,7 +26,7 @@ El backend esta desarrollado con Node.js y TypeScript. El frontend usa React y V
 
 | Integrante | Rol | Responsabilidades |
 | --- | --- | --- |
-| Juan Aldair Ramirez | Backend / IA | Express, TypeScript, extraccion, OCR, Ollama, prompts e integracion backend |
+| Juan Aldair Ramirez | Backend / IA | Express, TypeScript, extraccion, OCR, Gemini, prompts e integracion backend |
 | Luis Fernando Flores | Frontend / UI | React, Vite, carga de archivos, dashboard, resultados e historial |
 | Edu Andre Perez | Automatizaciones / RPA / BD | Nodemailer, PostgreSQL, RPA, n8n y flujos automatizados |
 | Alexander Valenzuela | DevOps / QA / documentacion | GitHub, GitHub Actions, ramas, pruebas, despliegue y documentacion |
@@ -114,10 +114,10 @@ El backend ya tenia:
 - Extraccion DOCX mediante `mammoth`.
 - OCR para imagenes mediante `tesseract.js` en espanol.
 - Preprocesamiento inicial con `sharp`.
-- Clasificacion local con Ollama.
-- Modelo configurable mediante `OLLAMA_MODEL`.
+- Clasificacion remota con Gemini (Google AI Studio).
+- Modelo configurable mediante `GEMINI_MODEL`.
 - Respuesta con tipo documental, confianza, campos, resumen, informe y derivacion.
-- Fallback local por palabras clave si Ollama no responde.
+- Fallback local por palabras clave si Gemini no responde.
 
 El frontend ya tenia:
 
@@ -173,7 +173,7 @@ Observaciones realizadas:
 - El texto indicaba un maximo de 2500 caracteres, pero la funcion recortaba a 12000.
 - La confianza se limita posteriormente entre 0 y 1.
 - El backend cuenta con fallback por palabras clave.
-- La extraccion local de campos complementa la respuesta de Ollama.
+- La extraccion local de campos complementa la respuesta de Gemini.
 
 ## 8. Recomendaciones del Avance 2
 
@@ -182,7 +182,7 @@ La guia del avance recomienda este orden:
 ```text
 1. Preprocesamiento OCR
 2. Parsers nativos DOCX/XLSX
-3. Cola de procesamiento para Ollama
+3. Cola de procesamiento para Gemini
 4. Pruebas automatizadas
 5. Persistencia y seguridad
 ```
@@ -192,7 +192,7 @@ Objetivos:
 - Reducir errores OCR en imagenes de baja calidad.
 - No aplicar OCR a documentos que ya tienen texto digital.
 - Conservar tablas, numeros y fechas.
-- Evitar saturar Ollama.
+- Evitar saturar la API de Gemini.
 - Reintentar errores temporales.
 - Mantener trazabilidad de los trabajos.
 
@@ -289,7 +289,7 @@ QUEUE_ENABLED=false
 REDIS_URL=redis://127.0.0.1:6379
 QUEUE_ATTEMPTS=3
 QUEUE_BACKOFF_MS=2000
-OLLAMA_CONCURRENCY=1
+# La concurrencia se controla en el worker de BullMQ
 ```
 
 Worker:
@@ -455,7 +455,7 @@ Commits relevantes:
 
 ```text
 9fc8702 fix: corregir despliegue Azure y health check
-f5a05cd feat: mejorar procesamiento documental y agregar cola Ollama
+f5a05cd feat: mejorar procesamiento documental y agregar cola de procesamiento IA
 ```
 
 ### Frontend
@@ -498,9 +498,9 @@ Backend minimo:
 ```env
 PORT=3000
 FRONTEND_URL=http://localhost:5173
-OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=phi3
-OLLAMA_TIMEOUT_MS=180000
+GEMINI_API_KEY=tu_clave_de_google_ai_studio
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_TIMEOUT_MS=45000
 ```
 
 Cola:
@@ -510,7 +510,7 @@ QUEUE_ENABLED=false
 REDIS_URL=redis://127.0.0.1:6379
 QUEUE_ATTEMPTS=3
 QUEUE_BACKOFF_MS=2000
-OLLAMA_CONCURRENCY=1
+# La concurrencia se controla en el worker de BullMQ
 ```
 
 El archivo `.env` nunca debe subirse a GitHub. Solo debe existir en la VM o como secreto del entorno.
@@ -533,7 +533,7 @@ El archivo `.env` nunca debe subirse a GitHub. Solo debe existir en la VM o como
 - Agregar pruebas DOCX con tablas.
 - Agregar pruebas XLSX con fechas, decimales y montos.
 - Levantar Redis y probar trabajos concurrentes.
-- Probar timeout de Ollama y backoff.
+- Probar timeout de Gemini y backoff.
 - Separar el envio de correo en una cola propia.
 
 ### Proyecto real
@@ -593,7 +593,7 @@ El avance puede considerarse listo cuando:
 - El frontend compila.
 - El E2E pasa.
 - Redis y el worker fueron probados si la cola esta activada.
-- Ollama respeta la concurrencia configurada.
+- La cola respeta la concurrencia configurada.
 - Los errores temporales se reintentan.
 - Azure responde correctamente en `/health`.
 - No existen secretos en Git.

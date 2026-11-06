@@ -5,7 +5,9 @@ graphify-out/
 # Configuración local de agentes de IA (no versionar)
 .agents/
 .claude/
-.opencode/
+.opencode/*
+!.opencode/skills/
+!.opencode/skills/**
 
 # Estado local de las skills de agentes (se regenera solo)
 skills-lock.json
