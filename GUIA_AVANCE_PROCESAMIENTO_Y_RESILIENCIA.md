@@ -9,7 +9,7 @@ La guia esta pensada para completarse durante la implementacion. No contiene una
 - Reducir errores de lectura en imagenes y documentos escaneados.
 - Evitar aplicar OCR a archivos que ya tienen texto digital.
 - Conservar tablas, montos, fechas y estructura relevante antes de enviar el contenido a la IA.
-- Evitar que varias peticiones saturen Ollama.
+- Evitar que varias peticiones saturen la API de Gemini.
 - Reintentar trabajos temporales, especialmente procesamiento IA y envio de correos.
 - Mantener trazabilidad de estados y errores.
 
@@ -24,7 +24,7 @@ feature/preprocesamiento-ocr
 feature/parsers-documentos-nativos
         |
         v
-feature/cola-procesamiento-ollama
+feature/cola-procesamiento-ia
         |
         v
 develop
@@ -48,7 +48,7 @@ La alternativa recomendada es mantener tres ramas separadas porque cada una resu
 - Integrar primero en `develop`.
 - Llevar a `main` solamente despues de validar la integracion.
 - No mezclar cambios de infraestructura con cambios de extraccion sin necesidad.
-- No subir `.env`, claves SSH, documentos sensibles ni modelos de Ollama.
+- No subir `.env`, claves SSH, documentos sensibles ni claves de API de Gemini.
 
 Commits sugeridos:
 
@@ -134,12 +134,12 @@ Commit sugerido:
 feat(parser): extraer estructura de documentos nativos
 ```
 
-### PR de `feature/cola-procesamiento-ollama`
+### PR de `feature/cola-procesamiento-ia`
 
 ```md
 ## ¿Qué se hizo?
 - [x] Se implemento una cola para controlar el procesamiento de documentos.
-- [x] Se limitaron las ejecuciones simultaneas de Ollama.
+- [x] Se limitaron las ejecuciones simultaneas contra Gemini.
 - [x] Se agregaron estados de trabajo: `pending`, `processing`, `completed`, `failed` y `retrying`.
 - [x] Se agregaron reintentos con backoff para errores temporales.
 - [x] El envio de correo se proceso como trabajo independiente.
@@ -150,7 +150,7 @@ feat(parser): extraer estructura de documentos nativos
 - [x] Ejecutar el worker.
 - [x] Ejecutar `npm run typecheck` y `npm run build`.
 - [x] Enviar varias peticiones simultaneas.
-- [x] Verificar que Ollama respete el limite de concurrencia.
+- [x] Verificar que Gemini respete el limite de concurrencia.
 - [x] Simular un timeout y comprobar los reintentos.
 - [x] Simular un fallo de correo y comprobar que no se repita el procesamiento IA.
 - [x] Verificar que el frontend muestre el estado correcto del trabajo.
@@ -349,9 +349,9 @@ Backend:
 - MIME no soportado devuelve `400`.
 - Archivo ausente devuelve `400`.
 - Archivo demasiado grande es rechazado.
-- Ollama devuelve un JSON valido.
-- Ollama devuelve JSON invalido y se activa el fallback.
-- Ollama no responde y el error queda controlado.
+- Gemini devuelve un JSON valido.
+- Gemini devuelve JSON invalido y se activa el fallback.
+- Gemini no responde y el error queda controlado.
 - `/health` devuelve `200`.
 - `/upload` devuelve el contrato esperado.
 
@@ -390,7 +390,7 @@ No conviene guardar el historial solo en `localStorage` para un sistema real: se
 Frontend
   -> Backend Express
       -> Supabase Auth / PostgreSQL / Storage
-      -> Ollama
+      -> Gemini (API)
 ```
 
 El frontend no deberia conectarse directamente a tablas sensibles. El backend debe controlar las operaciones y usar una clave de servidor protegida.
@@ -550,7 +550,7 @@ Antes de uso real, implementar:
 - Roles: administrador, operador, revisor y auditor.
 - Autorizacion por documento y area.
 - Rate limiting para subida y consultas.
-- Limites de concurrencia para Ollama.
+- Limites de concurrencia para Gemini.
 - Validacion de MIME y firma binaria.
 - Sanitizacion de nombres de archivos.
 - Almacenamiento privado.
@@ -587,7 +587,7 @@ Medir:
 - Latencia de subida.
 - Tiempo de extraccion.
 - Tiempo de OCR.
-- Tiempo de Ollama.
+- Tiempo de Gemini.
 - Tasa de errores.
 - Reintentos.
 - Jobs pendientes.
@@ -600,7 +600,7 @@ Mantener:
 - Alertas cuando el backend cae.
 - Alertas cuando la cola acumula trabajos.
 - Health check de backend.
-- Health check de Ollama.
+- Health check de la API de Gemini.
 - Health check de Redis, si se incorpora.
 - Health check de Supabase, si corresponde.
 
@@ -619,7 +619,7 @@ La derivacion actual es un mapeo de tipo documental a correo. Para un sistema re
 - No guardar credenciales SMTP en el repositorio.
 - Validar que el destinatario corresponda al area.
 
-El correo debe ser un job separado de la clasificacion para que una falla SMTP no repita OCR ni Ollama.
+El correo debe ser un job separado de la clasificacion para que una falla SMTP no repita OCR ni Gemini.
 
 ---
 
@@ -836,7 +836,7 @@ El resultado deberia normalizarse a un formato comun, por ejemplo:
 }
 ```
 
-No enviar directamente estructuras imposibles de validar a Ollama. Primero normalizar.
+No enviar directamente estructuras imposibles de validar a Gemini. Primero normalizar.
 
 ## XLSX
 
@@ -918,7 +918,7 @@ Verificar especialmente:
 
 ---
 
-# Rama 3: `feature/cola-procesamiento-ollama`
+# Rama 3: `feature/cola-procesamiento-ia`
 
 ## Objetivo
 
@@ -929,7 +929,7 @@ Actualmente el flujo es sincrono:
 ```text
 POST /upload
   -> extraer texto
-  -> llamar Ollama
+  -> llamar a Gemini
   -> generar resumen
   -> responder
 ```
@@ -944,7 +944,7 @@ POST /upload
 
 Worker
   -> extraer o recibir texto
-  -> llamar Ollama
+  -> llamar a Gemini
   -> reintentar si falla
   -> guardar resultado
   -> marcar estado
@@ -960,7 +960,7 @@ BullMQ necesita Redis. Antes de implementar, definir:
 - Que ocurre si Redis se reinicia.
 - Que limite de memoria tendra.
 
-Para la VM actual, comenzar con concurrencia `1` para Ollama en CPU.
+Para la VM actual, comenzar con concurrencia `1` para el worker de procesamiento; Gemini no depende de CPU local.
 
 ## Archivos sugeridos
 
@@ -1022,7 +1022,7 @@ error
 
 Configurar reintentos solo para errores temporales:
 
-- Ollama no responde.
+- Gemini no responde.
 - Timeout temporal.
 - Redis pierde conexion momentaneamente.
 - SMTP no responde.
@@ -1085,7 +1085,7 @@ Comenzar con polling simple si el volumen todavia es bajo.
 
 - Una subida devuelve un `jobId`.
 - El frontend puede consultar el estado.
-- Ollama no recibe mas trabajos simultaneos que el limite definido.
+- Gemini no recibe mas trabajos simultaneos que el limite definido.
 - Los fallos temporales se reintentan.
 - Los trabajos fallidos quedan visibles y explican el error.
 - El correo tiene sus propios reintentos.
@@ -1140,7 +1140,7 @@ Registrar antes y despues:
 
 - Tiempo de extraccion.
 - Tiempo de OCR.
-- Tiempo de Ollama.
+- Tiempo de Gemini.
 - Tiempo total.
 - Porcentaje de campos correctos.
 - Porcentaje de jobs fallidos.
@@ -1170,7 +1170,7 @@ PM2 online
 GET /health = 200
 GET /api/health = 200
 Nginx valido
-Ollama accesible
+API de Gemini accesible
 Redis accesible, si aplica
 ```
 
@@ -1193,7 +1193,7 @@ Completar durante la implementacion:
 - [ ] Definir umbral de calidad OCR.
 - [ ] Decidir si se guarda la imagen original.
 - [ ] Elegir Redis local o administrado.
-- [ ] Definir concurrencia maxima de Ollama.
+- [ ] Definir concurrencia maxima del worker de IA.
 - [ ] Definir cantidad y backoff de reintentos.
 - [ ] Definir politica de limpieza de jobs.
 - [ ] Definir formato de progreso para el frontend.
@@ -1208,7 +1208,7 @@ Al finalizar este avance, el sistema deberia:
 1. Leer imagenes de baja calidad con menos errores.
 2. Extraer DOCX y XLSX nativos sin depender de OCR.
 3. Procesar PDF digitales y escaneados por rutas diferentes.
-4. Controlar las peticiones a Ollama mediante una cola.
+4. Controlar las peticiones a Gemini mediante una cola.
 5. Reintentar errores temporales de IA y correo.
 6. Mantener estados claros y trazables.
 7. Conservar compatibilidad con el frontend y los informes ejecutivos actuales.
