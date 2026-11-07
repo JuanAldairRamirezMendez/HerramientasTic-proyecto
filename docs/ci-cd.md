@@ -43,8 +43,12 @@ Workflow: `.github/workflows/ci.yml`.
 |---|---|
 | `submodules` | Cada gitlink está publicado en `develop`, `main` o `master` del submódulo. |
 | `scripts` | Sintaxis Bash y ShellCheck de `scripts/*.sh`. |
+| `audit` | `npm audit --omit=dev` en backend y frontend; bloquea en `CRITICAL` y publica el reporte completo. |
+| `codeql` | Análisis estático JavaScript/TypeScript de ambos submódulos. |
+| `trivy` | Vulnerabilidades en el filesystem y en las imágenes; SARIF en Security. Bloquea en `CRITICAL`. |
 | `integration` | `docker compose config`, build de imágenes, arranque real del stack y smoke. |
 | `secrets` | Gitleaks sobre todo el historial. |
+| `images` | Publica imágenes inmutables en GHCR con tag SHA, digest, SBOM y procedencia. Solo en push a `develop`/`master`/`main` o `workflow_dispatch`, y solo si pasaron `integration`, `audit`, `codeql` y `trivy`. |
 
 El job `integration` construye el backend y el frontend, levanta Redis, API,
 worker y frontend, y comprueba:
@@ -52,6 +56,7 @@ worker y frontend, y comprueba:
 - `GET /health` del backend.
 - `GET /healthz` del frontend.
 - El `index.html` del frontend.
+- `GET /config.js` del frontend (configuración de runtime).
 
 No usa Gemini ni Supabase reales: `scripts/write-ci-env.sh` genera un `.env`
 con valores ficticios.
@@ -83,6 +88,12 @@ El script `scripts/deploy-railway.sh`:
 
 Métodos de despliegue:
 
+- `image` (recomendado): resuelve el digest de
+  `ghcr.io/<owner>/herramientastic-tic-<servicio>:<sha>` mediante la API OCI de
+  GHCR, configura el servicio con `railway service source connect --image
+  imagen@sha256:...` y despega con `railway redeploy --from-source`. Requiere
+  que el job `images` haya publicado ese SHA. La imagen es idéntica en staging y
+  producción; solo cambian las variables.
 - `redeploy` (default): `railway redeploy --commit <sha>`. Requiere que el
   servicio esté conectado al repositorio de GitHub en Railway.
 - `up`: `railway up` desde el directorio del submódulo. Sirve como fallback si
@@ -91,6 +102,22 @@ Métodos de despliegue:
 
 Si `redeploy` falla porque el servicio no está conectado a un repositorio, el
 script cae automáticamente a `up`.
+
+### Imágenes en GHCR
+
+- Nombres: `herramientastic-tic-backend` y `herramientastic-tic-frontend`.
+- Tags: SHA completo del commit y nombre de la rama; `latest` solo en
+  `master`/`main`.
+- El job `images` exige `packages: write`; el CD usa `packages: read` y
+  `GHCR_TOKEN` para resolver el digest.
+- Railway Trial no permite registrar credenciales de registro privado. Si el
+  paquete queda privado, el despliegue por digest falla al hacer pull. Verifica
+  que herede la visibilidad pública del repositorio o hazlo público en
+  **Package settings → Change visibility**.
+
+La configuración del frontend (`API_URL`, `API_UPSTREAM`, `DNS_RESOLVER`,
+`JOB_TIMEOUT_MS`) se aplica al arrancar el contenedor, así que promover una
+imagen no requiere rebuild.
 
 ## 4. Configuración en GitHub
 
@@ -116,7 +143,7 @@ protección para el primer despliegue.
 | `FRONTEND_URL` | Variable | URL pública del frontend de ese entorno. |
 | `SMOKE_CHAT_CHECK` | Variable | `1` para validar que “hola” no devuelve tarjetas. |
 | `SMOKE_EXPECT_DOCUMENTS` | Variable | `1` solo si staging/producción tienen documentos cargados. |
-| `RAILWAY_DEPLOY_METHOD` | Variable | `redeploy` (default) o `up`. |
+| `RAILWAY_DEPLOY_METHOD` | Variable | `image` (recomendado), `redeploy` (default) o `up`. |
 
 Configuración con GitHub CLI (el valor del secreto se escribe de forma
 interactiva, no en el historial del shell):
@@ -128,7 +155,7 @@ gh secret set RAILWAY_TOKEN --env staging
 gh variable set BACKEND_URL --env staging --body "https://<backend-staging>"
 gh variable set FRONTEND_URL --env staging --body "https://<frontend-staging>"
 gh variable set SMOKE_CHAT_CHECK --env staging --body "1"
-gh variable set RAILWAY_DEPLOY_METHOD --env staging --body "redeploy"
+gh variable set RAILWAY_DEPLOY_METHOD --env staging --body "image"
 ```
 
 Repetir con `--env production`.
@@ -163,22 +190,39 @@ Los detalles operativos están en
 5. Confirmar que cada servicio está conectado al repositorio correcto de GitHub
    si se usa el método `redeploy`.
 
-## 6. Qué queda para la Fase 1
+## 6. Infraestructura versionada
 
-La Fase 0 cierra el ciclo de entrega, pero todavía no es un CD maduro:
+`infra/terraform/` declara el proyecto, entornos, servicios, volúmenes y
+variables de Railway con el provider comunitario `railway ~> 0.6.3`. El
+workflow `Infra` (`.github/workflows/infra.yml`) solo ejecuta `fmt`, `init
+-backend=false` y `validate`; nunca aplica cambios ni requiere credenciales.
 
-- Construir una sola imagen inmutable y desplegarla por digest (GHCR).
-- Eliminar el build-time `VITE_API_URL` con configuración en runtime o proxy
-  Nginx parametrizado.
-- Migraciones versionadas de Supabase y validación en PR.
-- Cobertura de tests, e2e del chat y auditoría de dependencias.
-- CodeQL, Trivy y SBOM.
+Adoptar la infraestructura existente exige copiar `imports.tf.example` a
+`imports.tf` y revisar que el plan muestre imports, no creación de recursos
+duplicados. El detalle está en `infra/terraform/README.md`.
+
+## 7. Estado de la Fase 1 y pendientes
+
+Completado:
+
+- Imagen inmutable por servicio en GHCR con digest, SBOM y procedencia.
+- Despliegue por digest (`RAILWAY_DEPLOY_METHOD=image`).
+- Configuración runtime del frontend (sin `VITE_API_URL` de build).
+- Cobertura con umbral en el job `test` del backend y e2e determinista del chat.
+- `npm audit`, CodeQL, Trivy y Gitleaks en el pipeline.
+- Infraestructura de Railway versionada (validate-only).
+
+Pendiente:
+
+- Configurar `RAILWAY_TOKEN` por entorno y crear el entorno `staging`.
 - Healthcheck propio del worker y graceful shutdown.
+- Migraciones versionadas de Supabase y validación en PR.
 - Observabilidad: Sentry, métricas, alertas y panel de BullMQ.
 - Volumen persistente y workflow-as-code para n8n.
 - Bump automático de submódulos tras cada merge.
+- Corregir los `high` de `sharp`/`undici` y subir el umbral de `audit` a `high`.
 
-## 7. Ejecución local de los scripts
+## 8. Ejecución local de los scripts
 
 ```bash
 # Verificar submódulos
@@ -192,9 +236,14 @@ BACKEND_URL=http://localhost:3000 FRONTEND_URL=http://localhost \
 BACKEND_URL=https://<backend> FRONTEND_URL=https://<frontend> \
   SMOKE_CHAT_CHECK=1 bash scripts/smoke.sh
 
-# Despliegue manual
+# Despliegue manual por digest (imagen ya publicada por CI)
 RAILWAY_TOKEN=... RAILWAY_PROJECT_ID=... \
-  bash scripts/deploy-railway.sh staging
+  bash scripts/deploy-railway.sh staging --method image
+
+# Para paquetes privados de GHCR, exportar también GHCR_USER/GHCR_TOKEN.
+RAILWAY_TOKEN=... RAILWAY_PROJECT_ID=... \
+GHCR_USER=<usuario> GHCR_TOKEN=<token-con-read:packages> \
+  bash scripts/deploy-railway.sh staging --method image
 ```
 
 No ejecutes `scripts/write-ci-env.sh` sin `CI=true` o `--force`: sobrescribe el

@@ -49,10 +49,18 @@ Reglas:
 
 ### frontend
 
+Se leen al **arrancar el contenedor** (`docker-entrypoint.d/40-runtime-config.sh`),
+no al construir la imagen. La misma imagen sirve para staging y producción.
+
 | Variable | Notas |
 |---|---|
-| `VITE_API_URL` | **Build-time**. Debe ser la URL pública del backend del entorno. Cambiarla exige rebuild. |
-| `VITE_JOB_TIMEOUT_MS` | Opcional; build-time. |
+| `API_URL` | URL absoluta del backend para el navegador. Vacía = mismo origen con proxy de nginx. |
+| `API_UPSTREAM` | URL interna que nginx usa como upstream cuando `API_URL` está vacía. En Railway: `http://backend-api.railway.internal:3000`. |
+| `DNS_RESOLVER` | DNS para resolver `API_UPSTREAM`. En Railway: `fd12::10` (nginx lo escribe como `[fd12::10]`). Se autodetecta de `/etc/resolv.conf` si no se define. |
+| `JOB_TIMEOUT_MS` | Presupuesto de polling de jobs. `720000` (12 min) por defecto. |
+
+`VITE_API_URL` y `VITE_JOB_TIMEOUT_MS` siguen aceptándose como fallback de
+build time en desarrollo, pero el despliegue normal no los usa.
 
 ### n8n
 
@@ -94,7 +102,30 @@ tocar n8n:
 - El token se usa solo en `scripts/deploy-railway.sh` y en los workflows de
   GitHub Actions. No se imprime ni se commitea.
 
-## 5. Restart policy y límites del Trial
+## 5. Imágenes y despliegue por digest
+
+El CI publica en GHCR:
+
+- `ghcr.io/<owner>/herramientastic-tic-backend:<sha>`
+- `ghcr.io/<owner>/herramientastic-tic-frontend:<sha>`
+
+Cada imagen lleva digest, SBOM y procedencia. El despliegue recomendado es
+`RAILWAY_DEPLOY_METHOD=image`: el script resuelve el digest con la API OCI de
+GHCR y configura el servicio con `imagen@sha256:...`.
+
+Requisitos:
+
+- El job `images` debe haber publicado el SHA del submódulo.
+- Railway Trial no admite credenciales de registro privado: el paquete GHCR
+  debe ser público o el pull fallará. Verificar en **Package settings →
+  Change visibility**.
+- Para paquetes privados, el CD usa `GHCR_TOKEN` (el `GITHUB_TOKEN` del job con
+  `packages: read`). Localmente, exportar `GHCR_USER`/`GHCR_TOKEN`.
+
+Si se usa `redeploy`, el servicio debe estar conectado al repositorio de GitHub
+en Railway. `up` queda solo como fallback de emergencia.
+
+## 6. Restart policy y límites del Trial
 
 - Plan Trial: 1 GB de RAM y 2 vCPU por servicio.
 - Restart policy: `On Failure`, máximo 10 reintentos.
@@ -102,7 +133,7 @@ tocar n8n:
 - El backend incluye Chromium para generar PDFs; vigilar memoria en cargas
   concurrentes.
 
-## 6. Verificación operativa
+## 7. Verificación operativa
 
 ```bash
 # Estado del proyecto y servicios
@@ -126,9 +157,12 @@ BACKEND_URL=https://<backend> FRONTEND_URL=https://<frontend> \
   SMOKE_CHAT_CHECK=1 bash scripts/smoke.sh
 ```
 
-## 7. Deriva de configuración
+## 8. Deriva de configuración
 
-Como la configuración vive en el dashboard, revisar periódicamente:
+La configuración declarativa vive en `infra/terraform/` y el workflow `Infra`
+solo valida (`fmt`, `init -backend=false`, `validate`). Mientras el estado de
+Terraform no se haya importado y aplicado, el dashboard sigue siendo la fuente
+de verdad. Revisar periódicamente:
 
 - Start command de cada servicio.
 - Healthcheck path y puerto.
@@ -137,5 +171,7 @@ Como la configuración vive en el dashboard, revisar periódicamente:
 - Variables de entorno por entorno.
 - Dominios públicos.
 
-La Fase 2 puede automatizar esta verificación con la API de Railway, pero no
-conviene introducir Config as Code mientras el equipo dependa del dashboard.
+Para adoptar Terraform sin recrear recursos, copiar `imports.tf.example` a
+`imports.tf`, revisar que `terraform plan` muestre imports y aplicar solo
+después. El estado local contiene IDs y valores sensibles: configurar backend
+remoto antes de compartirlo.
