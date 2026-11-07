@@ -1,0 +1,166 @@
+name: CD
+
+# Se dispara cuando el workflow CI termina en develop (staging) o en la rama
+# estable (production). El job de producción usa el environment "production",
+# que debe tener revisores obligatorios configurados en GitHub.
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Entorno de Railway'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      ref:
+        description: 'Rama o SHA a desplegar'
+        required: true
+        default: develop
+        type: string
+
+# No cancelar un despliegue en curso: se encolan.
+concurrency:
+  group: cd-${{ github.event.workflow_run.head_branch || inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  staging:
+    name: Deploy staging
+    if: |
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'develop') ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging')
+    environment:
+      name: staging
+      url: ${{ vars.FRONTEND_URL }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - name: Descargar código del commit validado
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.ref }}
+          submodules: recursive
+
+      - name: Verificar commits de submódulos
+        run: bash scripts/verify-submodules.sh --env staging
+
+      - name: Validar variables del entorno
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+        run: |
+          : "${BACKEND_URL:?Configura la variable BACKEND_URL en el environment staging}"
+          : "${FRONTEND_URL:?Configura la variable FRONTEND_URL en el environment staging}"
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Instalar Railway CLI
+        run: npm install -g @railway/cli@5.71.0
+
+      - name: Desplegar en Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          RAILWAY_DEPLOY_METHOD: ${{ vars.RAILWAY_DEPLOY_METHOD || 'redeploy' }}
+        run: bash scripts/deploy-railway.sh staging
+
+      - name: Smoke test post-deploy
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          SMOKE_CHAT_CHECK: ${{ vars.SMOKE_CHAT_CHECK || '1' }}
+          SMOKE_EXPECT_DOCUMENTS: ${{ vars.SMOKE_EXPECT_DOCUMENTS || '0' }}
+        run: bash scripts/smoke.sh
+
+      - name: Logs del backend si falla
+        if: failure()
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+        run: |
+          railway logs \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment staging \
+            --service backend-api \
+            --lines 120 || true
+
+  production:
+    name: Deploy production
+    if: |
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.head_branch == 'master' ||
+        github.event.workflow_run.head_branch == 'main')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')
+    environment:
+      name: production
+      url: ${{ vars.FRONTEND_URL }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - name: Descargar código del commit validado
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.ref }}
+          submodules: recursive
+
+      - name: Verificar commits de submódulos
+        run: bash scripts/verify-submodules.sh --env production
+
+      - name: Validar variables del entorno
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+        run: |
+          : "${BACKEND_URL:?Configura la variable BACKEND_URL en el environment production}"
+          : "${FRONTEND_URL:?Configura la variable FRONTEND_URL en el environment production}"
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Instalar Railway CLI
+        run: npm install -g @railway/cli@5.71.0
+
+      - name: Desplegar en Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+          RAILWAY_DEPLOY_METHOD: ${{ vars.RAILWAY_DEPLOY_METHOD || 'redeploy' }}
+        run: bash scripts/deploy-railway.sh production
+
+      - name: Smoke test post-deploy
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          SMOKE_CHAT_CHECK: ${{ vars.SMOKE_CHAT_CHECK || '1' }}
+          SMOKE_EXPECT_DOCUMENTS: ${{ vars.SMOKE_EXPECT_DOCUMENTS || '0' }}
+        run: bash scripts/smoke.sh
+
+      - name: Logs del backend si falla
+        if: failure()
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+        run: |
+          railway logs \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment production \
+            --service backend-api \
+            --lines 120 || true
