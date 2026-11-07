@@ -90,10 +90,11 @@ Métodos de despliegue:
 
 - `image` (recomendado): resuelve el digest de
   `ghcr.io/<owner>/herramientastic-tic-<servicio>:<sha>` mediante la API OCI de
-  GHCR, configura el servicio con `railway service source connect --image
-  imagen@sha256:...` y despega con `railway redeploy --from-source`. Requiere
-  que el job `images` haya publicado ese SHA. La imagen es idéntica en staging y
-  producción; solo cambian las variables.
+  GHCR, donde `<sha>` es el commit del repo raíz que ejecutó el CI, configura
+  el servicio con `railway service source connect --image imagen@sha256:...` y
+  despega con `railway redeploy --from-source`. Requiere que el job `images`
+  haya publicado ese SHA. La imagen es idéntica en staging y producción; solo
+  cambian las variables.
 - `redeploy` (default): `railway redeploy --commit <sha>`. Requiere que el
   servicio esté conectado al repositorio de GitHub en Railway.
 - `up`: `railway up` desde el directorio del submódulo. Sirve como fallback si
@@ -106,8 +107,8 @@ script cae automáticamente a `up`.
 ### Imágenes en GHCR
 
 - Nombres: `herramientastic-tic-backend` y `herramientastic-tic-frontend`.
-- Tags: SHA completo del commit y nombre de la rama; `latest` solo en
-  `master`/`main`.
+- Tags: SHA completo del commit del repo raíz y nombre de la rama; `latest`
+  solo en `master`/`main`.
 - El job `images` exige `packages: write`; el CD usa `packages: read` y
   `GHCR_TOKEN` para resolver el digest.
 - Railway Trial no permite registrar credenciales de registro privado. Si el

@@ -109,13 +109,15 @@ El CI publica en GHCR:
 - `ghcr.io/<owner>/herramientastic-tic-backend:<sha>`
 - `ghcr.io/<owner>/herramientastic-tic-frontend:<sha>`
 
+El `<sha>` es el commit del repo raíz que ejecutó el CI (no el del submódulo).
+
 Cada imagen lleva digest, SBOM y procedencia. El despliegue recomendado es
 `RAILWAY_DEPLOY_METHOD=image`: el script resuelve el digest con la API OCI de
 GHCR y configura el servicio con `imagen@sha256:...`.
 
 Requisitos:
 
-- El job `images` debe haber publicado el SHA del submódulo.
+- El job `images` debe haber publicado el SHA del commit raíz que se despliega.
 - Railway Trial no admite credenciales de registro privado: el paquete GHCR
   debe ser público o el pull fallará. Verificar en **Package settings →
   Change visibility**.

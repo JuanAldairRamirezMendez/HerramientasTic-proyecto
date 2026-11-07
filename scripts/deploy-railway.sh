@@ -12,9 +12,9 @@
 #   up       -> sube el árbol local de cada submódulo (fallback).
 #
 # El método "image" exige que el job `images` del CI haya publicado
-# <IMAGE_PREFIX>-<servicio> con el tag del SHA del submódulo. "redeploy"
-# requiere que los servicios estén conectados a GitHub; si no lo están, el
-# script cae automáticamente a "up".
+# <IMAGE_PREFIX>-<servicio> con el tag del SHA del commit raíz desplegado.
+# "redeploy" requiere que los servicios estén conectados a GitHub; si no lo
+# están, el script cae automáticamente a "up".
 set -euo pipefail
 
 ENVIRONMENT="${1:-}"
@@ -73,6 +73,9 @@ BACKEND_PATH="$ROOT_DIR/Gestor-Inteligente-de-Documentos"
 FRONTEND_PATH="$ROOT_DIR/Gestor-Inteligente-de-Documentos-Frontend"
 BACKEND_SHA="$(git -C "$BACKEND_PATH" rev-parse HEAD)"
 FRONTEND_SHA="$(git -C "$FRONTEND_PATH" rev-parse HEAD)"
+# Las imágenes de GHCR se etiquetan con el SHA del commit del repo raíz (el
+# `github.sha` del job `images`), no con el SHA del submódulo.
+ROOT_SHA="$(git rev-parse HEAD)"
 WAIT_TIMEOUT="${RAILWAY_DEPLOY_TIMEOUT_SECONDS:-1200}"
 OWNER="${GITHUB_REPOSITORY_OWNER:-juanaldairramirezmendez}"
 IMAGE_PREFIX="${IMAGE_PREFIX:-ghcr.io/${OWNER,,}/herramientastic-tic}"
@@ -280,7 +283,7 @@ deploy_service() {
   local image_suffix="$3"
 
   if [[ "$METHOD" == "image" ]]; then
-    railway_image_deploy "$service" "$sha" "${IMAGE_PREFIX}-${image_suffix}"
+    railway_image_deploy "$service" "$ROOT_SHA" "${IMAGE_PREFIX}-${image_suffix}"
     return 0
   fi
 
@@ -296,7 +299,7 @@ log "Entorno: $ENVIRONMENT | método: $METHOD | proyecto: $RAILWAY_PROJECT_ID"
 log "Backend:  ${BACKEND_SHA:0:7}"
 log "Frontend: ${FRONTEND_SHA:0:7}"
 if [[ "$METHOD" == "image" ]]; then
-  log "Imágenes: ${IMAGE_PREFIX}-<servicio>:<sha>"
+  log "Imágenes: ${IMAGE_PREFIX}-<servicio>:${ROOT_SHA}"
 fi
 
 # Orden: primero la API, luego el worker (mismo commit) y al final el frontend.
