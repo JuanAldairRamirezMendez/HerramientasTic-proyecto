@@ -1,0 +1,354 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - develop
+
+  pull_request:
+    branches:
+      - master
+      - main
+      - develop
+
+  workflow_dispatch:
+
+# Cancela ejecuciones viejas de la misma rama.
+concurrency:
+  group: ci-root-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOCKER_BUILDKIT: '1'
+  COMPOSE_DOCKER_CLI_BUILD: '1'
+
+jobs:
+  # Comprueba que los gitlinks apunten a commits publicados en ramas estables.
+  submodules:
+    name: submodules
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Descargar código con submódulos
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Verificar commits de submódulos
+        run: bash scripts/verify-submodules.sh --env any
+
+  # Valida los scripts antes de usarlos en el pipeline de integración.
+  scripts:
+    name: scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v7
+
+      - name: Validar sintaxis Bash
+        run: |
+          for script in scripts/*.sh; do
+            bash -n "$script"
+          done
+
+      - name: Instalar ShellCheck si falta
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+
+      - name: Ejecutar ShellCheck
+        run: shellcheck scripts/*.sh
+
+  # Audita dependencias de producción de ambos submódulos.
+  # La puerta bloquea en CRITICAL; el reporte completo (high+) se publica como
+  # artefacto para ir subiendo el umbral a medida que se corrigen hallazgos.
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Descargar código con submódulos
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            Gestor-Inteligente-de-Documentos/package-lock.json
+            Gestor-Inteligente-de-Documentos-Frontend/package-lock.json
+
+      - name: Auditar backend (bloquea CRITICAL)
+        working-directory: Gestor-Inteligente-de-Documentos
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Auditar frontend (bloquea CRITICAL)
+        working-directory: Gestor-Inteligente-de-Documentos-Frontend
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Generar reporte completo
+        if: always()
+        run: |
+          (cd Gestor-Inteligente-de-Documentos && npm audit --omit=dev --json > ../audit-backend.json || true)
+          (cd Gestor-Inteligente-de-Documentos-Frontend && npm audit --omit=dev --json > ../audit-frontend.json || true)
+
+      - name: Publicar reporte
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit
+          path: |
+            audit-backend.json
+            audit-frontend.json
+          if-no-files-found: ignore
+
+  # Análisis estático de seguridad (CodeQL) sobre ambos submódulos.
+  codeql:
+    name: codeql
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Descargar código con submódulos
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+
+      - name: Analizar
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:javascript-typescript
+
+  # Escaneo de vulnerabilidades en dependencias e imágenes base.
+  # Bloquea en CRITICAL; el SARIF queda en la pestaña Security.
+  trivy:
+    name: trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Descargar código con submódulos
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Escanear filesystem
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          skip-dirs: graphify-out,.git
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-fs.sarif
+          exit-code: '1'
+          limit-severities-for-sarif: true
+
+      - name: Publicar SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+  # Levanta el stack real (API + worker + Redis + frontend) y hace smoke.
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    needs:
+      - submodules
+      - scripts
+    timeout-minutes: 40
+
+    steps:
+      - name: Descargar código con submódulos
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Generar .env ficticio para CI
+        run: bash scripts/write-ci-env.sh
+
+      - name: Validar docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Construir imágenes
+        run: docker compose build
+
+      - name: Levantar servicios
+        run: docker compose up -d --wait --wait-timeout 300 redis backend-api backend-worker frontend
+
+      - name: Smoke test
+        env:
+          BACKEND_URL: http://localhost:3000
+          FRONTEND_URL: http://localhost
+        run: bash scripts/smoke.sh
+
+      - name: Mostrar logs si falla
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+
+      - name: Detener servicios
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v7
+        with:
+          # Historial completo: Gitleaks escanea también los commits nuevos.
+          fetch-depth: 0
+
+      # Escaneo de secretos. Es gratuito en repositorios de usuario.
+      - name: Escaneo de secretos (Gitleaks)
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Construye una imagen inmutable por servicio y la publica en GHCR con
+  # digest + SBOM + procedencia. Solo se ejecuta después de que el stack real,
+  # la auditoría y CodeQL hayan pasado: nada llega al registro sin pruebas.
+  images:
+    name: images (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs:
+      - integration
+      - audit
+      - codeql
+      - trivy
+    if: |
+      (github.event_name == 'push' &&
+       (github.ref == 'refs/heads/develop' ||
+        github.ref == 'refs/heads/master' ||
+        github.ref == 'refs/heads/main')) ||
+      github.event_name == 'workflow_dispatch'
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            context: Gestor-Inteligente-de-Documentos
+          - service: frontend
+            context: Gestor-Inteligente-de-Documentos-Frontend
+
+    steps:
+      - name: Descargar código con submódulos
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Calcular nombre de imagen
+        id: image
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "name=ghcr.io/${owner}/herramientastic-tic-${SERVICE}" >> "$GITHUB_OUTPUT"
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Iniciar sesión en GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadatos de la imagen
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+
+      - name: Construir y publicar
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./${{ matrix.context }}
+          file: ./${{ matrix.context }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      - name: Guardar digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE: ${{ steps.image.outputs.name }}
+        run: |
+          printf '%s@%s\n' "$IMAGE" "$DIGEST" > "digest-${{ matrix.service }}.txt"
+          cat "digest-${{ matrix.service }}.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Escanear imagen publicada
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          exit-code: '1'
+          limit-severities-for-sarif: true
+
+      - name: Publicar SARIF de la imagen
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-${{ matrix.service }}
+
+      - name: Publicar digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-digest-${{ matrix.service }}
+          path: digest-${{ matrix.service }}.txt
+          if-no-files-found: error
