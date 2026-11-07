@@ -33,8 +33,6 @@
 
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-
 # --- Home real: con sudo, $HOME es /root, así que se usa SUDO_USER ------------
 HOME_DIR="${HOME:-}"
 if [ -n "${SUDO_USER:-}" ]; then

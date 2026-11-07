@@ -38,6 +38,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
     command: node dist/index.js
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   backend-worker:
     build:
@@ -69,8 +75,15 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend-api
+      backend-api:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
 
   tunnel:
     image: cloudflare/cloudflared:latest
