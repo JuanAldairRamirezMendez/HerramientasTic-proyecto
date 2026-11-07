@@ -104,6 +104,11 @@ Métodos de despliegue:
 Si `redeploy` falla porque el servicio no está conectado a un repositorio, el
 script cae automáticamente a `up`.
 
+En producción los tres servicios ya están conectados a una imagen de GHCR por
+digest. Para futuros despliegues usa `--method image` (o
+`RAILWAY_DEPLOY_METHOD=image`); el default `redeploy` intentaría desplegar un
+commit de GitHub y terminaría cayendo a `up`.
+
 ### Imágenes en GHCR
 
 - Nombres: `herramientastic-tic-backend` y `herramientastic-tic-frontend`.
@@ -212,6 +217,10 @@ Completado:
 - Cobertura con umbral en el job `test` del backend y e2e determinista del chat.
 - `npm audit`, CodeQL, Trivy y Gitleaks en el pipeline.
 - Infraestructura de Railway versionada (validate-only).
+- Producción desplegada por digest desde `master` (commit raíz `e84990a`) con
+  backend `11aee1f` y frontend `dcc6a7f`; `/config.js`, proxy `/documents` y
+  chat verificados (sin tarjetas para "hola", con tarjetas para "¿Qué
+  documentos hay?").
 
 Pendiente:
 

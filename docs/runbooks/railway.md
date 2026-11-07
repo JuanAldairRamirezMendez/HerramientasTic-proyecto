@@ -55,12 +55,19 @@ no al construir la imagen. La misma imagen sirve para staging y producción.
 | Variable | Notas |
 |---|---|
 | `API_URL` | URL absoluta del backend para el navegador. Vacía = mismo origen con proxy de nginx. |
-| `API_UPSTREAM` | URL interna que nginx usa como upstream cuando `API_URL` está vacía. En Railway: `http://backend-api.railway.internal:3000`. |
+| `API_UPSTREAM` | URL interna que nginx usa como upstream cuando `API_URL` está vacía. En Railway, el host es el `RAILWAY_PRIVATE_DOMAIN` del servicio backend (por ejemplo, `http://gestor-inteligente-de-documentos.railway.internal:3000`), no el nombre lógico `backend-api`. |
 | `DNS_RESOLVER` | DNS para resolver `API_UPSTREAM`. En Railway: `fd12::10` (nginx lo escribe como `[fd12::10]`). Se autodetecta de `/etc/resolv.conf` si no se define. |
 | `JOB_TIMEOUT_MS` | Presupuesto de polling de jobs. `720000` (12 min) por defecto. |
 
 `VITE_API_URL` y `VITE_JOB_TIMEOUT_MS` siguen aceptándose como fallback de
 build time en desarrollo, pero el despliegue normal no los usa.
+
+Para obtener el host correcto del backend:
+
+```bash
+railway variables --project "$RAILWAY_PROJECT_ID" --environment production \
+  --service backend-api --json | jq -r .RAILWAY_PRIVATE_DOMAIN
+```
 
 ### n8n
 
