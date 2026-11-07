@@ -61,6 +61,7 @@ log "Frontend: $FRONTEND_URL"
 fetch_until "$BACKEND_URL/health" "backend /health" '"status":"ok"'
 fetch_until "$FRONTEND_URL/healthz" "frontend /healthz" 'ok'
 fetch_until "$FRONTEND_URL/" "frontend index.html" 'Gestor Inteligente de Documentos'
+fetch_until "$FRONTEND_URL/config.js" "frontend /config.js" '__APP_CONFIG__'
 
 if [[ "${SMOKE_CHAT_CHECK:-0}" == "1" ]]; then
   log "Comprobando que un saludo no devuelve tarjetas de documentos"
