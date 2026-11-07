@@ -1,0 +1,55 @@
+name: Infra
+
+# Valida la infraestructura declarativa sin credenciales ni apply.
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/infra.yml'
+
+  push:
+    branches:
+      - develop
+      - master
+      - main
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/infra.yml'
+
+  workflow_dispatch:
+
+concurrency:
+  group: infra-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: terraform
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: infra/terraform
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v7
+
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.17.1'
+          terraform_wrapper: false
+
+      - name: Verificar formato
+        run: terraform fmt -check -recursive
+
+      - name: Inicializar provider
+        run: terraform init -backend=false -input=false
+
+      - name: Validar configuración
+        run: terraform validate
