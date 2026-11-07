@@ -1,0 +1,40 @@
+# Copiar a imports.tf SOLO antes de adoptar la infraestructura existente.
+# terraform plan importa los recursos al state; no los recrea.
+#
+# Los IDs corresponden al proyecto actual. Verificar en el dashboard antes de
+# ejecutar: Railway puede cambiar IDs si se recrea un servicio.
+
+import {
+  to = railway_project.this
+  id = "0daa6d53-029f-4658-a89a-81ad6d1bf00d"
+}
+
+import {
+  to = railway_environment.this["production"]
+  id = "0daa6d53-029f-4658-a89a-81ad6d1bf00d:production"
+}
+
+import {
+  to = railway_service.this["backend-api"]
+  id = "ecdba587-f68b-4d01-83ae-608f6a00f10e"
+}
+
+import {
+  to = railway_service.this["backend-worker"]
+  id = "66501232-5303-4c37-b0cd-d0655fc43ee1"
+}
+
+import {
+  to = railway_service.this["frontend"]
+  id = "e93658d9-53f3-43f5-8648-0c19fd89949d"
+}
+
+import {
+  to = railway_service.this["redis"]
+  id = "281c60be-8c2e-42e4-ab66-720ee2277063"
+}
+
+import {
+  to = railway_service.this["n8n"]
+  id = "0f65ab9a-4a5a-424d-a3ec-b55d945d89e2"
+}
