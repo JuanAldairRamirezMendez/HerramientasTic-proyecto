@@ -74,6 +74,12 @@ services:
       dockerfile: Dockerfile
     ports:
       - "80:80"
+    environment:
+      # API_URL vacía: el navegador llama al mismo origen y nginx hace proxy.
+      API_URL: ${FRONTEND_API_URL:-}
+      API_UPSTREAM: http://backend-api:3000
+      DNS_RESOLVER: ${DNS_RESOLVER:-127.0.0.11}
+      JOB_TIMEOUT_MS: ${JOB_TIMEOUT_MS:-720000}
     depends_on:
       backend-api:
         condition: service_healthy
