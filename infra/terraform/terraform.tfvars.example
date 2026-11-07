@@ -1,0 +1,27 @@
+# Copiar a terraform.tfvars (ignorado por git) y completar sin secretos.
+project_name = "HerramientasTIC"
+image_prefix = "ghcr.io/juanaldairramirezmendez/herramientastic-tic"
+
+# Bootstrap únicamente. En operación normal, fijar digests inmutables:
+# image_digests = {
+#   backend-api    = "sha256:..."
+#   backend-worker = "sha256:..."
+#   frontend       = "sha256:..."
+# }
+image_tag = "latest"
+
+# Variables no sensibles por entorno/servicio. Los secretos van por TF_VAR_* o
+# por un tfvars fuera del repositorio.
+# service_variables = {
+#   production = {
+#     backend-api = {
+#       GEMINI_MODEL         = "gemini-3.5-flash-lite"
+#       GEMINI_THINKING_LEVEL = "minimal"
+#       FRONTEND_URL         = "https://frontend-production-fa08.up.railway.app"
+#     }
+#     frontend = {
+#       API_UPSTREAM  = "http://backend-api.railway.internal:3000"
+#       DNS_RESOLVER  = "fd12::10"
+#     }
+#   }
+# }
