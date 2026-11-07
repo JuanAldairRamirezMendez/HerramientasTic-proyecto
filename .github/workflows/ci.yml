@@ -170,6 +170,7 @@ jobs:
           format: sarif
           output: trivy-fs.sarif
           exit-code: '1'
+          limit-severities-for-sarif: true
 
       - name: Publicar SARIF
         if: always()
@@ -336,6 +337,7 @@ jobs:
           format: sarif
           output: trivy-${{ matrix.service }}.sarif
           exit-code: '1'
+          limit-severities-for-sarif: true
 
       - name: Publicar SARIF de la imagen
         if: always()
