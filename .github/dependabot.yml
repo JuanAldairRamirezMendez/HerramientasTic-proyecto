@@ -1,0 +1,50 @@
+version: 2
+updates:
+  # Dependencias npm del backend (submódulo Gestor-Inteligente-de-Documentos).
+  # Solo patch y minor; majors se revisan a mano para no romper el contrato de API.
+  - package-ecosystem: "npm"
+    directory: "/Gestor-Inteligente-de-Documentos"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 10
+    allow:
+      - dependency-type: "production"
+        dependency-name: "*"
+      - dependency-type: "development"
+        dependency-name: "*"
+    ignore:
+      # Parches known-high que requieren cambio de runtime (no solo bump).
+      - dependency-name: "sharp"
+        versions: [">=0.33"]
+      - dependency-name: "undici"
+        versions: [">=6"]
+    versioning-strategy: "auto"
+
+  # Dependencias npm del frontend (submódulo Gestor-Inteligente-de-Documentos-Frontend).
+  - package-ecosystem: "npm"
+    directory: "/Gestor-Inteligente-de-Documentos-Frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 10
+    allow:
+      - dependency-type: "production"
+        dependency-name: "*"
+      - dependency-type: "development"
+        dependency-name: "*"
+    versioning-strategy: "auto"
+
+  # GitHub Actions del runner y workflows de la raíz + submódulos.
+  # Actualizaciones de actions/OS son baratas y críticas; se revisan cada semana.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 10
+    allow:
+      - dependency-type: "all"
